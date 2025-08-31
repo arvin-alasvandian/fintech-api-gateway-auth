@@ -1,0 +1,38 @@
+openapi: 3.0.3
+info:
+  title: FinTech API Gateway Auth
+  version: 0.1.0
+  description: MVP OpenAPI skeleton with health endpoints.
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      summary: Liveness
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+  /readyz:
+    get:
+      summary: Readiness (DB + Redis)
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready:
+                    type: boolean
+                    example: true
+        '503':
+          description: Not ready

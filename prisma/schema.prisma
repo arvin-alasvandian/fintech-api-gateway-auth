@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  merchant
+  customer
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+
+  users            User[]
+  apiKeys          ApiKey[]
+  webhookEndpoints WebhookEndpoint[]
+  rateLimitPolicy  RateLimitPolicy?
+  auditLogs        AuditLog[]
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  role          Role
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  org       Organization? @relation(fields: [orgId], references: [id])
+  orgId     String?
+  sessions  Session[]
+  auditLogs AuditLog[]
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  refreshHash String
+  userAgent   String?
+  ip          String?
+  revoked     Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  @@index([userId])
+}
+
+model ApiKey {
+  id         String   @id @default(cuid())
+  orgId      String
+  keyId      String   @unique
+  keyHash    String
+  revoked    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime?
+
+  org Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
+}
+
+model WebhookEndpoint {
+  id              String   @id @default(cuid())
+  orgId           String
+  url             String
+  secret          String
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  lastDeliveredAt DateTime?
+
+  org Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
+}
+
+model RateLimitPolicy {
+  id     String @id @default(cuid())
+  orgId  String @unique
+  perMin Int    @default(600)
+  perDay Int?
+
+  org Organization @relation(fields: [orgId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorType String
+  actorId   String
+  orgId     String?
+  action    String
+  target    String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  org  Organization? @relation(fields: [orgId], references: [id])
+  user User?         @relation(fields: [actorId], references: [id])
+}
