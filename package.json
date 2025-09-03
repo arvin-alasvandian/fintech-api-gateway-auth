@@ -17,19 +17,25 @@
     "prisma:migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
+    "@fastify/rate-limit": "9.1.0",
     "@fastify/swagger": "^8.14.0",
     "@fastify/swagger-ui": "^3.0.1",
+    "@prisma/client": "^5.20.0",
+    "bcryptjs": "^3.0.2",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
     "fastify-plugin": "^4.5.1",
     "ioredis": "^5.4.1",
+    "jose": "^6.1.0",
+    "jsonwebtoken": "^9.0.2",
     "pino": "^9.4.0",
     "prisma": "^5.20.0",
-    "@prisma/client": "^5.20.0",
     "yaml": "^2.5.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/jest": "^29.5.14",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.14.12",
     "@types/supertest": "^2.0.16",
     "@typescript-eslint/eslint-plugin": "^7.14.1",

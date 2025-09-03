@@ -1,18 +1,14 @@
-import "dotenv/config";
-import { buildApp } from "./app.js";
+// src/server.ts
+import app from "./app.js";
 
-const PORT = Number(process.env.PORT || 8080);
-const app = buildApp();
+const port = Number(process.env.PORT ?? 8080);
+const host = "0.0.0.0";
 
-async function start() {
-  try {
-    await app.listen({ port: PORT, host: "0.0.0.0" });
-    app.log.info(`Server running on http://localhost:${PORT}`);
-    app.log.info(`Docs at http://localhost:${PORT}/docs`);
-  } catch (err) {
-    app.log.error(err);
-    process.exit(1);
-  }
+try {
+  await app.listen({ port, host });
+  app.log.info(`Server running on http://localhost:${port}`);
+  app.log.info(`Docs at http://localhost:${port}/docs`);
+} catch (err) {
+  app.log.error(err);
+  process.exit(1);
 }
-
-start();
