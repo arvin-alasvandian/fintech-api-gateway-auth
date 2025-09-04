@@ -1,4 +1,4 @@
-import { FastifyInstance } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
 import { hashPassword, verifyPassword } from "../lib/password.js";
 import { signAccessToken } from "../lib/jwt.js";
@@ -10,7 +10,6 @@ function nowPlusDays(d: number) {
 }
 
 export default async function authRoutes(app: FastifyInstance) {
-  // REGISTER
   app.post("/v1/auth/register", async (req, reply) => {
     const body = req.body as { email: string; password: string; role?: string };
     if (!body?.email || !body?.password) {
@@ -21,7 +20,9 @@ export default async function authRoutes(app: FastifyInstance) {
     const allowedRoles = new Set(["admin", "merchant", "customer"]);
     const normalizedRole = (body.role ?? "customer").toLowerCase();
     if (!allowedRoles.has(normalizedRole)) {
-      return reply.code(400).send({ error: "invalid_role", allowed: Array.from(allowedRoles) });
+      return reply
+        .code(400)
+        .send({ error: "invalid_role", allowed: Array.from(allowedRoles) });
     }
 
     const exists = await app.prisma.user.findUnique({ where: { email: body.email } });
@@ -45,10 +46,10 @@ export default async function authRoutes(app: FastifyInstance) {
     }
   });
 
-  // LOGIN
   app.post("/v1/auth/login", async (req, reply) => {
     const body = req.body as { email: string; password: string };
-    if (!body?.email || !body?.password) return reply.code(400).send({ error: "missing_fields" });
+    if (!body?.email || !body?.password)
+      return reply.code(400).send({ error: "missing_fields" });
 
     const user = await app.prisma.user.findUnique({ where: { email: body.email } });
     if (!user) return reply.code(401).send({ error: "invalid_credentials" });
@@ -56,12 +57,14 @@ export default async function authRoutes(app: FastifyInstance) {
     const ok = await verifyPassword(body.password, user.passwordHash);
     if (!ok) return reply.code(401).send({ error: "invalid_credentials" });
 
-    const accessToken = await signAccessToken({ sub: user.id, role: user.role.toLowerCase() });
+    const accessToken = await signAccessToken({
+      sub: user.id,
+      role: (user.role as string).toLowerCase(),
+    });
 
     const raw = randomBytes(32).toString("hex");
     const refreshHash = await hashPassword(raw);
     const ttlDays = Number(process.env.REFRESH_TTL_DAYS || 30);
-
     const session = await app.prisma.session.create({
       data: {
         userId: user.id,
@@ -72,12 +75,11 @@ export default async function authRoutes(app: FastifyInstance) {
       },
       select: { id: true },
     });
-
     const refreshToken = `${session.id}.${raw}`;
+
     return reply.send({ accessToken, refreshToken });
   });
 
-  // REFRESH
   app.post("/v1/auth/refresh", async (req, reply) => {
     const body = req.body as { refreshToken: string };
     if (!body?.refreshToken) return reply.code(400).send({ error: "missing_fields" });
@@ -89,19 +91,21 @@ export default async function authRoutes(app: FastifyInstance) {
       where: { id: sessionId },
       include: { user: true },
     });
-
     if (!session || session.revoked || session.expiresAt < new Date() || !session.user) {
       return reply.code(401).send({ error: "invalid_refresh" });
     }
 
-    const ok = await (await import("bcryptjs")).compare(raw, session.refreshHash);
+    const bcrypt = await import("bcryptjs");
+    const ok = await bcrypt.compare(raw, session.refreshHash);
     if (!ok) return reply.code(401).send({ error: "invalid_refresh" });
 
-    const accessToken = await signAccessToken({ sub: session.user.id, role: session.user.role.toLowerCase() });
+    const accessToken = await signAccessToken({
+      sub: session.user.id,
+      role: (session.user.role as string).toLowerCase(),
+    });
     return reply.send({ accessToken });
   });
 
-  // LOGOUT
   app.post("/v1/auth/logout", async (req, reply) => {
     const body = req.body as { refreshToken: string };
     if (!body?.refreshToken) return reply.code(400).send({ error: "missing_fields" });
@@ -109,28 +113,18 @@ export default async function authRoutes(app: FastifyInstance) {
     const [sessionId] = body.refreshToken.split(".");
     if (!sessionId) return reply.code(400).send({ error: "bad_token" });
 
-    await app.prisma.session.updateMany({ where: { id: sessionId }, data: { revoked: true } });
+    await app.prisma.session.updateMany({
+      where: { id: sessionId },
+      data: { revoked: true },
+    });
     return reply.send({ ok: true });
   });
 
-  // ME (FIXED)
-  app.get("/v1/me", { preHandler: [app.authenticate] }, async (req, reply) => {
-    const payload: any = req.user || {};
-    const userId = payload.sub || payload.id;
-
-    if (!userId) {
-      return reply.code(401).send({ error: "invalid_token" });
-    }
-
-    const user = await app.prisma.user.findUnique({
-      where: { id: userId },
+  app.get("/v1/me", { preHandler: app.authenticate }, async (req) => {
+    const sub = req.user!.sub;
+    return await app.prisma.user.findUnique({
+      where: { id: sub },
       select: { id: true, email: true, role: true, createdAt: true },
     });
-
-    if (!user) {
-      return reply.code(401).send({ error: "invalid_token" });
-    }
-
-    return user;
   });
 }
