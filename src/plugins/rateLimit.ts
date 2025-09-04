@@ -1,29 +1,40 @@
-// src/plugins/rateLimit.ts
 import fp from "fastify-plugin";
 import rateLimit from "@fastify/rate-limit";
-import IORedis from "ioredis";
 
-export default fp(async (app) => {
-  let redis: IORedis | undefined;
+// Type-only import for ioredis client
+type RedisClient = import("ioredis").Redis;
 
-  try {
-    const url = process.env.REDIS_URL ?? "redis://localhost:6379";
-    redis = new IORedis(url, { lazyConnect: true, maxRetriesPerRequest: 1 });
-    await redis.connect();
+declare module "fastify" {
+  interface FastifyInstance {
+    rateLimitRedis?: RedisClient;
+  }
+}
+
+/**
+ * Global rate limit with Redis backend (if REDIS_URL is set).
+ * Compatible with @fastify/rate-limit v6 (for Fastify v4).
+ */
+const rateLimitPlugin = fp(async (app) => {
+  let redis: RedisClient | undefined;
+
+  if (process.env.REDIS_URL) {
+    const mod = await import("ioredis");
+    const RedisCtor: any = (mod as any).default ?? (mod as any);
+    redis = new RedisCtor(process.env.REDIS_URL);
+    app.decorate("rateLimitRedis", redis);
     app.log.info("rate-limit: using Redis backend");
-  } catch {
-    app.log.warn("rate-limit: Redis unavailable, falling back to in-memory store");
-    redis = undefined;
+  } else {
+    app.log.info("rate-limit: using memory store");
   }
 
-  // Global plugin; per-route overrides will apply where specified.
   await app.register(rateLimit, {
-    max: 1000,              // generous global ceiling
-    timeWindow: "1 minute",
-    skipOnError: true,      // don't 500 if Redis hiccups
-    nameSpace: "rl:",
-    redis,                  // if undefined, uses in-memory
-    keyGenerator: (req) =>
-      (req.headers["x-forwarded-for"] as string) || req.ip,
-  });
-});
+    global: true,
+    max: 300,
+    timeWindow: "5 minutes",
+    skipOnError: true,
+    // For v6, pass the ioredis client directly
+    ...(redis ? { redis } : {}),
+  } as any);
+}, { name: "rate-limit" });
+
+export default rateLimitPlugin;
